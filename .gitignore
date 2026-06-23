@@ -1,0 +1,17 @@
+*.pyc
+__pycache__/
+*.log
+
+# requirements.txt must stay tracked despite the *.txt rule below.
+*.txt
+!requirements.txt
+
+/documents
+
+# Secrets — never commit the Anthropic API key used by the LLM judge. Export it in
+# the shell instead (see README): export ANTHROPIC_API_KEY=...
+.env
+.env.*
+set_env.sh
+*secret*
+*.key
