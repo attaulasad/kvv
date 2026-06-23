@@ -1,0 +1,48 @@
+{
+  "timestamp": "20260623_073552",
+  "config_file": "/workspace/kvv/configs/full_experiment.yaml",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "dtype": "bfloat16",
+  "precompute_mode": "standard_causal",
+  "mve_enabled": false,
+  "datasets": [
+    "rgb"
+  ],
+  "num_examples": {
+    "rgb": 300
+  },
+  "k_values": [
+    1,
+    3,
+    5
+  ],
+  "conditions": [
+    "C0",
+    "C1",
+    "C2",
+    "C3"
+  ],
+  "precisions": [
+    "fp16",
+    "int8",
+    "int4"
+  ],
+  "wiki_pages": 0,
+  "chunk_size": 512,
+  "chunk_overlap": 10,
+  "similarity_top_k": 10,
+  "stages": [
+    "build",
+    "stage0",
+    "eval",
+    "calib",
+    "analyze",
+    "tables"
+  ],
+  "merge_provenance": {
+    "note": "Consolidated 7B results. C0/C1/C3 from results_7b_fixed (INT4 fix applied); C2 (INT8) from results_7b_all (INT8 codepath was never broken). Two separate runs of Qwen/Qwen2.5-7B-Instruct, so the FP16 baselines differ by a small run-to-run margin (<1pp); disclosed, not hidden.",
+    "c013_source": "results_7b_fixed",
+    "c2_source": "results_7b_all",
+    "calibration_note": "calibration/ carried over from results_7b_fixed and NOT re-run: calibrate_metrics.py loads the HHEM + DeBERTa-NLI models to re-score, which the copy-only/no-model constraint forbids. It is a metric-validation diagnostic (HHEM vs NLI correlation) and does not feed paper_table / H1 / H2 / H3."
+  }
+}
