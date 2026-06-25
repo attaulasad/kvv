@@ -1,8 +1,8 @@
 
 model:
   # 3B for development; switch to 7B for the final run.
-  name: "Qwen/Qwen2.5-3B-Instruct"
-  # name: "Qwen/Qwen2.5-7B-Instruct"
+  # name: "Qwen/Qwen2.5-3B-Instruct"
+  name: "Qwen/Qwen2.5-7B-Instruct"
   use_flash_attn: false              # raw-key storage requires eager attention
   dtype: "bfloat16"                  # Qwen2.5 is bf16-native; fp16 overflows the KV cache → NaN logits
 
@@ -63,7 +63,7 @@ datasets:
     hf_split:       "validation"
     question_field: "question"
     answer_field:   "answer"
-    num_examples:   0
+    num_examples:   200
     use_provided_context: true
     description:    "Multi-hop QA (optional secondary; set num_examples>0 to enable)"
 
@@ -74,7 +74,7 @@ datasets:
     question_field: "question"
     answer_field:   "answer"
     query_file:     "questions/rgb.jsonl"   # ships positive + negative docs
-    num_examples:   200
+    num_examples:   0
     description:    "RAG robustness under noisy retrieval (H1, H3)"
 
 # MVE disabled for the full paper run.
@@ -148,5 +148,5 @@ stage0:
   max_degenerate_rate: 0.02          # < 2% degenerate generations per condition
 
 gpu:
-  chunk_cache_gpu: 0
-  evaluate_gpu:    0                 # single RTX 3090
+  chunk_cache_gpu: 1
+  evaluate_gpu:    1                 # single RTX 3090

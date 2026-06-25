@@ -1,0 +1,4 @@
+dataset,k,n_pairs,mean_gap,ci_lo,ci_hi
+hotpotqa,1,83,0.0964,-0.0241,0.2169
+hotpotqa,3,137,0.1168,0.0365,0.1971
+hotpotqa,5,145,0.2483,0.1586,0.331

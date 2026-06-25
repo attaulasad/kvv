@@ -1,0 +1,20 @@
+{
+  "n": 300,
+  "condition": "all",
+  "n_by_condition": {
+    "C2": 80,
+    "C0": 85,
+    "C1": 64,
+    "C3": 71
+  },
+  "hhem_avg": 0.45290400583452234,
+  "hallucination_rate": 0.5333333333333333,
+  "nli_avg_entailment": 0.20737694128618386,
+  "pearson_r": 0.45479768245216334,
+  "pearson_p": 1.0137896373071574e-16,
+  "spearman_r": 0.5274866033985177,
+  "spearman_p": 6.901081781446914e-23,
+  "both_strong": false,
+  "both_significant": true,
+  "verdict_agree": false
+}

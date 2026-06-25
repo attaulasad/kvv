@@ -1,0 +1,7 @@
+{
+  "n_validated": 0,
+  "n_agree": 0,
+  "agreement": null,
+  "metric": "llm_correct_vs_containment_EM",
+  "model": "claude-haiku-4-5"
+}
