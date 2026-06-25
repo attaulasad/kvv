@@ -1,0 +1,13 @@
+{
+  "hotpotqa_docs": 2964,
+  "hotpotqa_num_examples": 300,
+  "num_chunks": 2978,
+  "precisions": [
+    "fp16",
+    "int8",
+    "int4"
+  ],
+  "chunk_size": 512,
+  "chunk_overlap": 10,
+  "embedding_model": "BAAI/bge-small-en-v1.5"
+}

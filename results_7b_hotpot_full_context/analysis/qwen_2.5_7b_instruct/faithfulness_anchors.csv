@@ -1,0 +1,13 @@
+dataset,k,condition,hhem_hallucination,nli_entailment,llm_faithful_rate,llm_correct_rate,n_llm
+hotpotqa,1,C0,0.3806,0.318,N/A,N/A,0
+hotpotqa,1,C1,0.3731,0.3237,0.726,0.5959,146
+hotpotqa,1,C2,0.3881,0.3328,N/A,N/A,0
+hotpotqa,1,C3,0.4179,0.4989,0.5317,0.3366,205
+hotpotqa,3,C0,0.21,0.298,N/A,N/A,0
+hotpotqa,3,C1,0.22,0.3196,0.7366,0.683,224
+hotpotqa,3,C2,0.235,0.3035,N/A,N/A,0
+hotpotqa,3,C3,0.28,0.337,0.5504,0.458,238
+hotpotqa,5,C0,0.1963,0.2417,N/A,N/A,0
+hotpotqa,5,C1,0.1822,0.2571,0.7778,0.7051,234
+hotpotqa,5,C2,0.2103,0.2346,N/A,N/A,0
+hotpotqa,5,C3,0.4299,0.2326,0.3801,0.369,271

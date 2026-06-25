@@ -1,0 +1,2 @@
+mode,n,slope,intercept,r,p,h3_supported,reason
+quant_noise_level,9,0.0588,0.1866,0.5197,0.151572,False,hallucination_rate vs quant level (C1<C2<C3) pooled across K; dataset has no retrieved-noise ratio
