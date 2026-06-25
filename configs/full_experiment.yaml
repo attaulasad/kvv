@@ -63,7 +63,7 @@ datasets:
     hf_split:       "validation"
     question_field: "question"
     answer_field:   "answer"
-    num_examples:   200
+    num_examples:   300
     use_provided_context: true
     description:    "Multi-hop QA (optional secondary; set num_examples>0 to enable)"
 
