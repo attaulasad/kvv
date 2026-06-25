@@ -395,11 +395,31 @@ def analyze_h2_slope(idx, report_lines) -> List[Dict]:
 
 # ── H3: noise-slope within RGB only (regress paired gap on retrieved noise) ───
 
-def analyze_h3_noise_slope(idx, report_lines) -> List[Dict]:
+def analyze_h3_noise_slope(idx, data, report_lines) -> List[Dict]:
+    """H3 – does hallucination scale with noise/quantization?
+
+    Two definitions, tried in order, so H3 yields a real row for every dataset
+    while NEVER writing an empty file:
+
+      1. retrieved_noise_ratio (PRIMARY, RGB) — the original H3, UNCHANGED:
+         regress the paired INT4−FP16 hallucination gap on the per-example
+         retrieved-noise ratio. Only datasets that carry a noise_ratio (RGB) have
+         the signal, so this branch is skipped for multi-hop sets like HotpotQA.
+
+      2. quant_noise_level (FALLBACK, any dataset) — regress the aggregate
+         hallucination rate on the KV-cache quantization level (FP16<INT8<INT4,
+         encoded 1/2/3), pooled across K. This is the dataset-agnostic reading of
+         H3: "does more aggressive quantization noise raise hallucination?" and is
+         what makes H3 computable for HotpotQA, which has no retrieved-noise ratio.
+
+    If neither is computable, a single row with NaN values, h3_supported=False and
+    an explanatory `reason` is written — an empty file is never produced.
+    """
     rows = []
-    report_lines.append("H3 – Task/Noise Complexity (RGB only: INT4−FP16 hall gap vs retrieved-noise ratio)")
+    report_lines.append("H3 – Task/Noise Complexity (noise-ratio slope; quant-level fallback)")
     report_lines.append("-" * 70)
 
+    # ── 1. PRIMARY: RGB retrieved-noise-ratio slope (logic preserved) ──
     noises: List[float] = []
     deltas: List[float] = []
     for (ds, k), byc in sorted(idx.items()):
@@ -414,28 +434,79 @@ def analyze_h3_noise_slope(idx, report_lines) -> List[Dict]:
             noises.append(float(noise))
             deltas.append(int(h3) - int(h1))
 
-    if len(noises) < 3 or len(set(noises)) < 2:
+    if len(noises) >= 3 and len(set(noises)) >= 2:
+        reg = linregress(noises, deltas)
+        supported = (reg.slope > 0) and (reg.pvalue < 0.05)
+        rows.append({
+            "mode": "retrieved_noise_ratio",
+            "n": len(noises),
+            "slope": round(float(reg.slope), 4),
+            "intercept": round(float(reg.intercept), 4),
+            "r": round(float(reg.rvalue), 4),
+            "p": round(float(reg.pvalue), 6),
+            "h3_supported": supported,
+            "reason": "RGB paired INT4-FP16 hall gap vs retrieved-noise ratio",
+        })
         report_lines.append(
-            f"  H3 NOT evaluated (need ≥3 RGB paired examples with ≥2 distinct noise "
-            f"ratios; got n={len(noises)}, distinct={len(set(noises))})."
+            f"  [retrieved_noise_ratio] n={len(noises)}  slope={reg.slope:+.4f}  "
+            f"r={reg.rvalue:+.3f}  p={reg.pvalue:.4g}  "
+            f"H3={'SUPPORTED' if supported else 'NOT supported'}"
         )
         report_lines.append("")
         return rows
 
-    reg = linregress(noises, deltas)
-    supported = (reg.slope > 0) and (reg.pvalue < 0.05)
-    rows.append({
-        "n": len(noises),
-        "slope": round(float(reg.slope), 4),
-        "intercept": round(float(reg.intercept), 4),
-        "r": round(float(reg.rvalue), 4),
-        "p": round(float(reg.pvalue), 6),
-        "h3_supported": supported,
-    })
     report_lines.append(
-        f"  n={len(noises)}  slope={reg.slope:+.4f}  r={reg.rvalue:+.3f}  "
-        f"p={reg.pvalue:.4g}  H3={'SUPPORTED' if supported else 'NOT supported'}"
+        f"  retrieved_noise_ratio not available (n={len(noises)}, "
+        f"distinct={len(set(noises))}); falling back to quant-noise-level slope."
     )
+
+    # ── 2. FALLBACK: hallucination rate vs quantization level, pooled across K ──
+    LEVEL = {"C1": 1, "C2": 2, "C3": 3}    # FP16 < INT8 < INT4 = increasing noise
+    levels: List[float] = []
+    hrates: List[float] = []
+    for row in data:
+        cond = row.get("condition")
+        if cond not in LEVEL:
+            continue
+        hr = safe_float(row.get("hallucination_rate"))
+        if math.isnan(hr):
+            continue
+        levels.append(float(LEVEL[cond]))
+        hrates.append(hr)
+
+    if len(levels) >= 3 and len(set(levels)) >= 2:
+        reg = linregress(levels, hrates)
+        supported = (reg.slope > 0) and (reg.pvalue < 0.05)
+        rows.append({
+            "mode": "quant_noise_level",
+            "n": len(levels),
+            "slope": round(float(reg.slope), 4),
+            "intercept": round(float(reg.intercept), 4),
+            "r": round(float(reg.rvalue), 4),
+            "p": round(float(reg.pvalue), 6),
+            "h3_supported": supported,
+            "reason": ("hallucination_rate vs quant level (C1<C2<C3) pooled across K; "
+                       "dataset has no retrieved-noise ratio"),
+        })
+        report_lines.append(
+            f"  [quant_noise_level] n={len(levels)}  slope={reg.slope:+.4f}  "
+            f"r={reg.rvalue:+.3f}  p={reg.pvalue:.4g}  "
+            f"H3={'SUPPORTED' if supported else 'NOT supported'}"
+        )
+        report_lines.append("")
+        return rows
+
+    # ── Neither computable → explicit NaN row (never an empty file) ──
+    rows.append({
+        "mode": "none",
+        "n": len(levels),
+        "slope": float("nan"), "intercept": float("nan"),
+        "r": float("nan"), "p": float("nan"),
+        "h3_supported": False,
+        "reason": ("insufficient data: no RGB noise-ratio pairs and <3 quant "
+                   "hallucination-rate points with >=2 distinct levels"),
+    })
+    report_lines.append("  H3 NOT computable — wrote NaN row with reason.")
     report_lines.append("")
     return rows
 
@@ -484,9 +555,9 @@ def main():
                   ["dataset", "k", "n_pairs", "mean_gap", "ci_lo", "ci_hi"],
                   h2_rows)
 
-        h3_rows = analyze_h3_noise_slope(idx, report_lines)
+        h3_rows = analyze_h3_noise_slope(idx, data, report_lines)
         write_csv(os.path.join(args.output_dir, "h3_noise_slope.csv"),
-                  ["n", "slope", "intercept", "r", "p", "h3_supported"],
+                  ["mode", "n", "slope", "intercept", "r", "p", "h3_supported", "reason"],
                   h3_rows)
 
         # Third faithfulness anchor — side-by-side HHEM/NLI/LLM-judge plus an

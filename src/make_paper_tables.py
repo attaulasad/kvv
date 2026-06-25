@@ -39,6 +39,11 @@ COLUMNS = [
     ("F1",                 "F1 (secondary)",   ".4f"),
     ("hallucination_rate", "Hallucination",    ".4f"),
     ("entailment_score",   "Entailment",       ".4f"),
+    # Refusal rate is part of the story for multi-hop QA (e.g. HotpotQA K=1, where
+    # ~51% of questions are unanswerable from a single chunk). Surfaced here so it
+    # is never silently dropped; refusals are excluded from the faithfulness
+    # denominator (n_total) but counted as wrong for EM/F1.
+    ("refusal_rate",       "Refusal",          ".4f"),
     ("n_nonfinite",        "NonFinite",        "d"),
     ("degenerate_rate",    "Degen.",           ".4f"),
     ("kv_mb",              "KV Size (MB)",     ".3f"),

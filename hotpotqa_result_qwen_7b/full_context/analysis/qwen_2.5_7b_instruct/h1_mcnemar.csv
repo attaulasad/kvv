@@ -1,5 +1,0 @@
-dataset,k,n_pairs,both_faithful_a,faithful_to_hall_b,hall_to_faithful_c,both_hall_d,mcnemar_p,h1_supported
-hotpotqa,1,66,35,9,7,15,0.803619,False
-hotpotqa,3,100,64,15,8,13,0.21004,False
-hotpotqa,5,98,53,29,5,11,8e-05,True
-POOLED,all,264,152,53,20,39,0.00018,True

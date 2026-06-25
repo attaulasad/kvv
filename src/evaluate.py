@@ -801,7 +801,17 @@ def main():
                         help="per_chunk_max: max faithfulness across retrieved chunks "
                              "(lenient; avoids K-dependent truncation). "
                              "full_context: score the answer against the concatenated "
-                             "context the model actually attended over (paper-faithful).")
+                             "context the model actually attended over (paper-faithful). "
+                             "NOTE for MULTI-HOP datasets (e.g. HotpotQA): use "
+                             "full_context as the PRIMARY mode. per_chunk_max scores "
+                             "each retrieved chunk independently and takes the max, so a "
+                             "correct multi-hop answer that synthesises facts across 2+ "
+                             "chunks is entailed by NO single chunk and is wrongly flagged "
+                             "as a hallucination. This inflates the C0 Oracle hallucination "
+                             "rate (e.g. HotpotQA K=3 21.6%->35.8%, K=5 17.8%->28.7%) even "
+                             "though the answers are correct. Treat per_chunk_max only as a "
+                             "truncation-robustness sensitivity check for such datasets, "
+                             "never as the headline faithfulness number.")
     parser.add_argument("--hhem_batch_size", type=int, default=16)
     parser.add_argument("--nli_batch_size",  type=int, default=16)
     parser.add_argument("--max_new_tokens",  type=int, default=MAX_NEW_TOKENS)
@@ -1015,12 +1025,20 @@ def main():
                     )
 
            
-            quant_conditions = [c for c in args.conditions if c != "C0"]
+            # Common faithfulness-evaluation set: examples present and non-refusal
+            # in EVERY condition (including the C0 Oracle). Previously the mask only
+            # required the quantized conditions to be non-refusal, so C0 was scored
+            # on its own (larger) non-refusal superset while C1–C3 used the smaller
+            # paired set. That gave C0 a different denominator (e.g. n=157 vs 145 at
+            # K=5) and biased the Oracle-vs-precomputed-KV comparison. Requiring all
+            # conditions makes every cell in a (dataset, K) row share one example
+            # set, so hallucination_rate / entailment / n_total are comparable.
+            common_conditions = list(args.conditions)
             paired_mask = [
                 all(
                     all_cond_results[c][i] is not None and not all_cond_results[c][i]["is_refusal"]
-                    for c in quant_conditions
-                ) if quant_conditions else False
+                    for c in common_conditions
+                ) if common_conditions else False
                 for i in range(n_ex)
             ]
             paired_n = sum(paired_mask)
@@ -1073,10 +1091,11 @@ def main():
                 refusal_rate = sum(is_refusals) / max(len(is_refusals), 1)
 
                 
-                if condition == "C0":
-                    nr_idx = [i for i in valid_idx if not per_ex[i]["is_refusal"]]
-                else:
-                    nr_idx = [i for i in nr_paired_idx if per_ex[i] is not None]
+                # Every condition (including C0) scores faithfulness over the SAME
+                # common non-refusal set, so C0 and C1–C3 share identical
+                # denominators for hallucination_rate / entailment / n_total /
+                # n_ctx_over_512. (Was: C0 used its own non-refusal superset.)
+                nr_idx = [i for i in nr_paired_idx if per_ex[i] is not None]
 
                 hall_rate   = float("nan")
                 ent_score   = float("nan")

@@ -93,7 +93,18 @@ def _build_user_prompt(rec: dict) -> str:
 
 
 def _judge_one(client, model: str, rec: dict, max_retries: int = 3):
+    """Score one record. Returns (correct, faithful, err).
+
+    On success err is None. On a final, unrecoverable failure correct/faithful are
+    None and err is a short '<type>: <message>' string so the caller can surface
+    *why* the judge produced nothing instead of writing a silent empty summary.
+    Two failure classes are distinguished:
+      * api_error   — the API call itself raised (auth, credit, rate-limit, network,
+                      invalid model id, …). This is the usual cause of an all-None run.
+      * parse_error — the call returned but the reply had no parseable JSON object.
+    """
     prompt = _build_user_prompt(rec)
+    last_err = "unknown"
     for attempt in range(max_retries):
         try:
             msg = client.messages.create(
@@ -102,19 +113,39 @@ def _judge_one(client, model: str, rec: dict, max_retries: int = 3):
                 system=SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
+        except Exception as e:                       # noqa: BLE001  (API-call failure)
+            last_err = f"api_error: {type(e).__name__}: {e}"
+            if attempt == max_retries - 1:
+                print(f"[llm_judge] API call failed (final): {last_err}", file=sys.stderr)
+                return None, None, last_err
+            time.sleep(2 ** attempt)
+            continue
+        # Call succeeded — parse the reply. A parse failure is NOT retried (the
+        # model already answered; retrying just burns budget on the same output).
+        try:
             text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
             start, end = text.find("{"), text.rfind("}")
+            if start == -1 or end == -1 or end < start:
+                raise ValueError(f"no JSON object in reply: {text[:120]!r}")
             obj = json.loads(text[start:end + 1])
-            return bool(obj.get("correct")), bool(obj.get("faithful"))
-        except Exception as e:                       # noqa: BLE001
-            if attempt == max_retries - 1:
-                print(f"[llm_judge] giving up on a record: {e}", file=sys.stderr)
-                return None, None
-            time.sleep(2 ** attempt)
-    return None, None
+            return bool(obj.get("correct")), bool(obj.get("faithful")), None
+        except Exception as e:                       # noqa: BLE001  (parse failure)
+            last_err = f"parse_error: {type(e).__name__}: {e}"
+            print(f"[llm_judge] could not parse reply: {last_err}", file=sys.stderr)
+            return None, None, last_err
+    return None, None, last_err
 
 
 def main():
+    # Make console output robust on non-UTF8 terminals (e.g. Windows cp1252):
+    # several status lines contain a '↔' arrow that crashes the default cp1252
+    # encoder. The JSONL/CSV/JSON outputs are ASCII/UTF-8 and unaffected.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     ap = argparse.ArgumentParser(description="Optional Claude LLM-as-judge scorer")
     ap.add_argument("--results_jsonl", required=True)
     ap.add_argument("--output_dir", default="llm_judge")
@@ -193,16 +224,39 @@ def main():
 
     judged = []
     n_scored = 0
+    n_ok = 0
+    err_counts: dict = {}        # error-class -> count
+    first_err = None
     for i, rec in enumerate(records):
         if i not in to_score:
             judged.append(rec)
             continue
-        correct, faithful = _judge_one(client, args.model, rec)
+        correct, faithful, err = _judge_one(client, args.model, rec)
         rec = dict(rec)
         rec["llm_correct"] = correct
         rec["llm_faithful"] = faithful
         judged.append(rec)
         n_scored += 1
+        if err is None:
+            n_ok += 1
+        else:
+            cls = err.split(":", 1)[0]
+            err_counts[cls] = err_counts.get(cls, 0) + 1
+            if first_err is None:
+                first_err = err
+
+    # ── Surface failures loudly (this is the Bug-1 fix: never write an empty
+    # summary without saying WHY). ────────────────────────────────────────────
+    n_failed = n_scored - n_ok
+    print(f"[llm_judge] scoring complete: attempted={n_scored}  ok={n_ok}  failed={n_failed}")
+    if n_failed:
+        print(f"[llm_judge] failure breakdown: {err_counts}", file=sys.stderr)
+        print(f"[llm_judge] first error: {first_err}", file=sys.stderr)
+    if n_scored and n_ok == 0:
+        print("[llm_judge] WARNING: EVERY judged record failed — the summary/validation "
+              "will be empty. Most common cause: ANTHROPIC_API_KEY invalid/out of credit, "
+              "rate-limited, or an unknown --model id. Fix the API access and re-run.",
+              file=sys.stderr)
 
     out_jsonl = os.path.join(args.output_dir, "results_judged.jsonl")
     with open(out_jsonl, "w", encoding="utf-8") as f:
@@ -248,6 +302,20 @@ def main():
             "metric":             "llm_correct_vs_containment_EM",
             "model":              args.model,
         }
+        # Bug-1 fix: when nothing was validated, record WHY instead of a silent
+        # null so a reviewer can see at a glance that the judge ran but failed.
+        if n_val == 0:
+            validation["status"] = "FAILED"
+            validation["n_attempted"] = n_scored
+            validation["n_api_or_parse_failures"] = n_scored - n_ok
+            validation["error_breakdown"] = err_counts
+            validation["first_error"] = first_err
+            validation["note"] = (
+                "No records produced a usable judge label. The judge code is fine "
+                "(it works on other datasets); this is a runtime API failure. Check "
+                "ANTHROPIC_API_KEY validity/credit, rate limits, and the --model id, "
+                "then re-run the judge stage."
+            )
         val_path = os.path.join(args.output_dir, "judge_validation.json")
         with open(val_path, "w", encoding="utf-8") as f:
             json.dump(validation, f, indent=2)
